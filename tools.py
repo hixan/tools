@@ -88,8 +88,8 @@ def loudfunction(outputlen: int = 80, print_first: bool = True):
                     maxlength=outputlen))
             fmt = 'rv: {value} -> {type}'
             olen = outputlen - 8
-            v = truncate(str(value), olen // 2)
-            t = truncate(type(value).__name__, olen - len(v))
+            v = truncate(str(rv), olen // 2)
+            t = truncate(type(rv).__name__, olen - len(v))
             print(fmt.format(value=v, type=t))
             print('-' * outputlen)
             return rv
