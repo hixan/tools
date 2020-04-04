@@ -1,8 +1,8 @@
-import matplotlib.pyplot as plt  # type: ignore
+import matplotlib.pyplot as plt
 from pathlib import Path
 from timeit import default_timer as timer
 from collections import Counter
-import numpy as np  # type: ignore
+import numpy as np
 from functools import reduce
 import operator as op
 import logging
