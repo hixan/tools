@@ -6,10 +6,20 @@ import numpy as np
 from functools import reduce
 import operator as op
 import logging
-from typing import Callable
+from typing import Callable, Mapping, Tuple, Sequence
 
 
 def truncate(string: str, maxlength: int = 80, elipses: bool = True):
+    ''' Truncates a string nicely in the center
+
+    :param string: string to truncate
+    :param maxlength: maximum length of string to output
+    :param elipses: set to true to explicitly include elipses '…' at the point
+        of truncation
+
+    if len(string) > maxlength this will always output a string of length
+    maxlength.
+    '''
     if maxlength <= 0:
         return ''
     if len(string) > maxlength:
@@ -34,64 +44,70 @@ def truncate(string: str, maxlength: int = 80, elipses: bool = True):
 
 
 def loudfunction(outputlen: int = 80, print_first: bool = True):
+    outputlen -= 2
     def rvfunc(function: Callable,
                print_first: bool = True,
                outputlen: int = outputlen):
         def f(first, *args, **kwargs):
-            fname = f"'{function.__name__}'"
-            # print starting line ------fname-------
-            print(
-                truncate(f'{fname:-^{outputlen}}',
-                         maxlength=outputlen,
-                         elipses=False))
+            def print_args(args):
+                # possibly skip first argument
+                if print_first:
+                    printargs = first, *args
+                else:
+                    printargs = args
 
-            # possibly skip first argument
-            if print_first:
-                printargs = first, *args
-            else:
-                printargs = args
+                # print unnamed arguments
+                if len(printargs) > 0:
+                    # len(' -> ')
+                    fmt = '{value} -> {type}'
+                    for arg in printargs:
+                        t = type(arg).__name__
+                        v = str(arg)
+                        t = truncate(t, outputlen // 3)
+                        v = truncate(v, outputlen - len(t) - 4)
+                        print('│',
+                              f"{fmt.format(value=v, type=t): <{outputlen}}",
+                              '│', sep='')
 
-            # print unnamed arguments
-            if len(printargs) > 0:
-                # len(' -> ')
-                maxlenarg = (outputlen - 4) // 2
-                fmt = '{value} -> {type}'
-                for arg in printargs:
-                    t = type(arg).__name__
-                    v = str(arg)
-                    t = truncate(t, outputlen // 3)
-                    v = truncate(v, outputlen - len(t) - 4)
-                    print(fmt.format(value=v, type=t))
-
-            # print named arguments: argname = 20 -> int
-            if len(kwargs) > 0:
-                fmt = '{name} = {value} -> {type}'
-                for argname in kwargs:
-                    value = kwargs[argname]
-                    olen = outputlen - 7
-                    # name is important - should be // 3
-                    n = truncate(argname, (olen // 2))
-                    t = truncate(type(value).__name__, olen - len(n) // 2)
-                    v = truncate(str(kwargs[argname]), olen - len(t) - len(n))
-                    print(fmt.format(name=n, value=v, type=t))
+            def print_kwargs(kwargs):
+                # print named arguments: argname = 20 -> int
+                if len(kwargs) > 0:
+                    fmt = '{name} = {value} -> {type}'
+                    for argname in kwargs:
+                        value = kwargs[argname]
+                        olen = outputlen - 7
+                        # name is important - should be // 3
+                        n = truncate(argname, (olen // 2))
+                        t = truncate(type(value).__name__, olen - len(n) // 2)
+                        v = truncate(str(kwargs[argname]), olen - len(t) - len(n))
+                        print('│', f"{fmt.format(name=n, value=v, type=t): <{outputlen}}", '│', sep='')
 
             # call function: -----start call to 'function'------
-            print(
-                truncate(f'{"Start call "+fname:-^{outputlen}}',
-                         maxlength=outputlen))
+
+            fname = f"'{function.__name__}'"
+            # print starting line ------fname-------
+            print('╒', truncate(f'{fname:═^{outputlen}}', maxlength=outputlen,
+                                elipses=False), '╕', sep='')
+            print_args(args)
+            print_kwargs(kwargs)
+            print('├', truncate(f'{"Start call "+fname:─^{outputlen}}',
+                                maxlength=outputlen),
+                  '┤', sep='')
             st = timer()
             rv = function(first, *args, **kwargs)
             et = timer()
-            print(
-                truncate(
-                    f'{"End call "+fname+f" - {et-st:.2f}s elapsed":-^{outputlen}}',
-                    maxlength=outputlen))
+            print('├', truncate(
+                f'{"End call "+fname+f" - {et-st:.2f}s elapsed":─^{outputlen}}',
+                maxlength=outputlen),
+                  '┤', sep='')
+            print_args(args)
+            print_kwargs(kwargs)
             fmt = 'rv: {value} -> {type}'
             olen = outputlen - 8
             v = truncate(str(rv), olen // 2)
             t = truncate(type(rv).__name__, olen - len(v))
-            print(fmt.format(value=v, type=t))
-            print('-' * outputlen)
+            print('│', f"{fmt.format(value=v, type=t): <{outputlen}}", '│', sep='')
+            print('╘', '═' * outputlen, '╛', sep='')
             return rv
 
         return f
@@ -104,7 +120,7 @@ def loudmethod(outputlen=80):
 
 
 def plot_frequencies(categorical):
-    ''' plot frequencies of an itterable containing categorical data'''
+    '''plot frequencies of an itterable containing categorical data'''
     labels, frequencies = zip(*Counter(categorical).items())
     x = np.arange(len(labels))
     plt.bar(x, frequencies, width=1)
@@ -136,29 +152,33 @@ def plot_images(images, size=(10, 10)):
             return
 
 
-def init_logging(name: str,
-                 debug=None,
-                 fp: Path = Path('.'),
-                 file_level=logging.NOTSET,
-                 stream_level=logging.WARNING):
+class DefaultArgumentsFilter(logging.Filter):
+    ''' Filter that will assign default values when an attribute is missing '''
 
-    if debug is not None:
-        raise Warning(
-            'using init_logging with debug is deprecated and has no effect')
+    def __init__(self, name, **defaults):
+        super(DefaultArgumentsFilter, self).__init__(name)
+        self.defaults = defaults
 
-    logger = logging.getLogger(name)
-    logger.setLevel(0)
+    def filter(self, record):
+        for key in self.defaults:
+            if not hasattr(record, 'user_id'):
+                record.__dict__[key] = self.defaults[key]
+        return True
 
-    fh = logging.FileHandler(fp / f'{name}.log')
-    fh.setLevel(file_level)
+
+def init_logging(fp: Path,
+                 sql_db: Mapping[str, str] = None):
+
+    logger = logging.Logger('')
+
+    fh = logging.FileHandler(fp)
+    sh = logging.StreamHandler()
+
     fmtstrs = (
         '{levelno:0>2}:{name:<25}(l:{lineno:0>4}):{levelname:>8}: {message}',
-        '{asctime:-^44} : {args}')
+        '{asctime:-^44} : ')
     fmtstr = '\n'.join(fmtstrs)
-    fh.setFormatter(logging.Formatter(fmtstr, style='{'))
-    sh = logging.StreamHandler()
     sh.setFormatter(logging.Formatter(fmtstr, style='{'))
-    sh.setLevel(stream_level)
 
     logger.addHandler(fh)
     logger.addHandler(sh)
