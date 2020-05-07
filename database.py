@@ -8,11 +8,13 @@ LOGGER: Optional[Logger] = None  # global, can be a logging.logger object
 
 Value = Union[bool, int, float, str]
 
+
 def dbexec(
-    connection: Connection,
-    sql: str,
-    args: List[str] = None,
-    msg: str = '',
+        connection: Connection,
+        sql: str,
+        args: List[str] = None,
+        msg: str = '',
+        commit: bool = True,
 ):
     '''
     runs  a single <sql> command with <connection>. Does raise sql errors but
@@ -21,16 +23,17 @@ def dbexec(
 
     if LOGGER:
         LOGGER.debug(msg, sql.replace('\n', ' '), args)
-    with connection:  # automatically commit changes
-        with connection.cursor() as cur:
-            try:
-                cur.execute(sql, args)
-            except (DatabaseError, ProgrammingError):
-                if LOGGER:
-                    LOGGER.warning(
-                        f'Database error encountered. (sql command, args)',
-                        ' '.join(sql.split()), args)
-                raise
+    with connection.cursor() as cur:
+        try:
+            cur.execute(sql, args)
+        except (DatabaseError, ProgrammingError):
+            if LOGGER:
+                LOGGER.warning(
+                    f'Database error encountered. (sql command, args)',
+                    ' '.join(sql.split()), args)
+            raise
+    if commit:
+        connection.commit()
 
 
 def dbquery(connection: Connection,
