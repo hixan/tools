@@ -6,7 +6,24 @@ import numpy as np
 from functools import reduce
 import operator as op
 import logging
-from typing import Callable, Mapping, Tuple, Sequence
+from typing import Callable, Mapping, Tuple, Sequence, TypeVar, Iterable
+
+T = TypeVar('T')
+
+
+def batch(itr: Iterable[T], batch_size: int) -> Iterable[Sequence[T]]:
+    i = iter(itr)
+    while True:
+        yv = []
+        try:
+            for _ in range(batch_size):
+                yv.append(next(i))
+            yield yv
+        except StopIteration:
+            break
+    if len(yv) > 0:
+        yield yv
+
 
 
 def truncate(string: str, maxlength: int = 80, elipses: bool = True):
