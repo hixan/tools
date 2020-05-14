@@ -7,9 +7,10 @@ from typing import (Union, Mapping, Sequence, Iterable, TypeVar, Tuple, Deque,
 from itertools import chain
 from .tools import batch
 from collections import deque
+from datetime import datetime
 
 
-Value = Union[bool, int, float, str]  # value of a returned database object
+Value = Union[bool, float, str, datetime, None]  # value of a returned database object
 T = TypeVar('T')
 
 
