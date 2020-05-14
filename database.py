@@ -10,7 +10,7 @@ from collections import deque
 from datetime import datetime
 
 
-Value = Union[bool, float, str, datetime, None]  # value of a returned database object
+Value = Union[bool, float, int, str, datetime, None]  # value of a returned database object
 T = TypeVar('T')
 
 
@@ -139,7 +139,7 @@ class PGDataBase:
         def insert_rows(
                 self,
                 columns: Sequence[str],
-                rows: Iterable[Tuple[str, ...]],
+                rows: Iterable[Tuple[Value, ...]],
                 connection: Connection,
                 batch_size: int = 20
         ):
