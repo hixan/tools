@@ -8,6 +8,7 @@ from itertools import chain
 from .tools import batch
 from collections import deque
 from datetime import datetime
+import atexit
 
 
 Value = Union[bool, float, int, str, datetime, None]  # value of a returned database object
@@ -19,29 +20,34 @@ class PGDataBase:
     def __init__(self, credentials):
         self._credentials = credentials
         self.tables: Dict[str, PGDataBase.Table] = {}
-        self._init_tables()
         self._connection_pool: List[Connection] = []
+        self._opened_count = 0
+        with self.connection() as conn:
+            self._init_tables(conn)
 
-    def _init_tables(self):
+        # disconnect when python exits
+        atexit.register(self.disconnect_all)
+
+    def _init_tables(self, connection):
         ''' syncronisis tables with the database '''
         # fetch table information
-        tableconn = self.connect()
         present = set()
-        for table in self._get_tables():
-            self.tables[table] = self.Table(table, tableconn)
+        for table in self._get_tables(connection):
+            self.tables[table] = self.Table(table, connection)
             present.add(table)
-        tableconn.close()
 
         # remove missing tables
         for t in set(self.tables.keys()) - present:
             del self.tables[t]
 
-    def _get_tables(self) -> Sequence[str]:
+    def _get_tables(
+            self, connection: Connection
+    ) -> Sequence[str]:
         '''
         retrieve table names from the database. Does not commit. Is not a
         generator.
         '''
-        with self.connect().cursor() as cursor:
+        with connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT relname
@@ -52,31 +58,37 @@ class PGDataBase:
             rv = cursor.fetchall()
         return [t[0] for t in rv]
 
-    def connect(self) -> Connection:
-        return connect(**self._credentials)
-
     def create_table(
             self,
             name: str,
             columnsdef: str,
             connection: Connection = None,
     ):
+        ''' does not commit '''
         sql = f'''CREATE TABLE {name} (
         {columnsdef}
         )
         '''
         if connection is None:
-            commit = True
-            connection = self.connect()
+            cmgr = self.connection()
+            connection = cmgr.__enter__()
+        else:
+            cmgr = None
+
         with connection.cursor() as cur:
             cur.execute(sql)
 
-        if commit:
-            connection.commit()
-            connection.close()
-        self._init_tables()
+        self._init_tables(connection)
 
-    def get_connection(self):
+        if cmgr:
+            cmgr.__exit__(None, None, None)
+
+    def disconnect_all(self):
+        for conn in self._connection_pool:
+            conn.close()
+        self._connection_pool = []
+
+    def connection(self):
         return PGDataBase._ConnectionHandler(self)
 
     class _ConnectionHandler:
@@ -88,19 +100,16 @@ class PGDataBase:
 
         def __enter__(self):
             if len(self._db._connection_pool) == 0:
-                self._db._connection_pool.append(self._db.connect())
+                self._db._connection_pool.append(connect(**self._db._credentials))
+                self._db._opened_count += 1
             self.connection = self._db._connection_pool.pop()
             return self.connection
 
         def __exit__(self, exc_type, exc_value, traceback):
-            print(exc_type, exc_value, traceback)
+            self.connection.commit()
             self._db._connection_pool.append(self.connection)
-            if exc_type is not None:
-                for connection in self._db._connection_pool:
-                    connection.close()
 
     class Table:
-        ''' table always manages its transactions '''
 
         def __init__(self, table: str, connection: Connection):
             self._tablename = table
@@ -109,7 +118,6 @@ class PGDataBase:
             self.primary_key = self._fetch_pks(connection)
             self._pk_cache: Optional[Collection[Tuple[Value, ...]]] = None
             print(self.primary_key)
-            connection.commit()
 
         def _fetch_columns(self, connection: Connection):
             with connection.cursor() as cursor:
@@ -130,7 +138,7 @@ class PGDataBase:
                 res = cursor.fetchall()
             return [r[0] for r in res]  # unpack the keys
 
-        def has_key(self, primary_key: Sequence[Value], connection: Connection):
+        def has_primary_key(self, primary_key: Sequence[Value], connection: Connection):
             # fetch cache if necessary
             if self._pk_cache is None:
                 self._pk_cache = set(self.select(self.primary_key, connection))
@@ -149,46 +157,41 @@ class PGDataBase:
             normal_template = sql + ','.join([row_template] * batch_size)
             handler_queue: Deque[Tuple[str, ...]] = deque()
 
-            curs = connection.cursor()
+            with connection.cursor() as curs:
 
-            # reset pk cache
-            self._pk_cache = None
+                # reset pk cache
+                self._pk_cache = None
 
-            # insert in batches
-            for b in batch(rows, batch_size):
-                # attempt to insert batch
-                curs.execute('savepoint start_batch')
-                try:
-                    if len(b) == batch_size:
-                        curs.execute(normal_template, tuple(chain.from_iterable(b)))
-                    else:
-                        curs.execute(sql + ','.join([row_template] * len(b)),
-                                     tuple(chain.from_iterable(b)))
+                # insert in batches
+                for b in batch(rows, batch_size):
+                    # attempt to insert batch
+                    curs.execute('savepoint start_batch')
+                    try:
+                        if len(b) == batch_size:
+                            curs.execute(normal_template, tuple(chain.from_iterable(b)))
+                        else:
+                            curs.execute(sql + ','.join([row_template] * len(b)),
+                                        tuple(chain.from_iterable(b)))
 
-                    curs.execute('release savepoint start_batch')
-                except (pge.DataError, pge.IntegrityError):
-                    # add batch to the queue to be handled later
-                    handler_queue.extend(b)
-                    # roll back to clean state
-                    curs.execute('rollback to savepoint start_batch')
+                        curs.execute('release savepoint start_batch')
+                    except (pge.DataError, pge.IntegrityError):
+                        # add batch to the queue to be handled later
+                        handler_queue.extend(b)
+                        # roll back to clean state
+                        curs.execute('rollback to savepoint start_batch')
 
-            retval = []
-            # handle the queue
-            for row in handler_queue:
-                curs.execute('savepoint start_insert')
-                try:
-                    curs.execute(sql+row_template, row)
-                except (pge.DataError, pge.IntegrityError):
-                    retval.append(row)  # this row could not be inserted
-                    curs.execute('rollback to savepoint start_insert')
-                curs.execute('release savepoint start_insert')
+                retval = []
+                # handle the queue
+                for row in handler_queue:
+                    curs.execute('savepoint start_insert')
+                    try:
+                        curs.execute(sql+row_template, row)
+                    except (pge.DataError, pge.IntegrityError):
+                        retval.append(row)  # this row could not be inserted
+                        curs.execute('rollback to savepoint start_insert')
+                    curs.execute('release savepoint start_insert')
 
-            curs.close()
-            connection.commit()
             return retval
-
-        def __len__(self):
-            raise NotImplementedError
 
         def select(
                 self, columns: Sequence[str], connection: Connection,

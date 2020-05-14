@@ -89,13 +89,13 @@ class Test_database:
         db = PGDataBase(creds)
         db.create_table('my_table', table_defn)
         table = db.tables['my_table']
-        c = db.connect()
-        missing_rows = table.insert_rows(columns_inserted, rows_inserted, c,
-                                         batch_size)
-        curs = c.cursor()
-        curs.execute('select * from my_table')
-        res = curs.fetchall()
-        curs.close()
+        with db.connection() as c:
+            missing_rows = table.insert_rows(columns_inserted, rows_inserted,
+                                             c, batch_size)
+            curs = c.cursor()
+            with c.cursor() as curs:
+                curs.execute('select * from my_table')
+                res = curs.fetchall()
         c.close()
 
         print('inserted rows:')
@@ -139,31 +139,37 @@ class Test_database:
         db.create_table('my_table', table_defn)
         table = db.tables['my_table']
 
-        with db.connect() as conn:
+        with db.connection() as conn:
             table.insert_rows(columns_inserted, rows_inserted, conn)
             present_keys = list(table.select(table.primary_key, conn, limit=None))
             print('checking present keys...')
             for key in present_keys:
                 print(key)
-                assert table.has_key(key, conn)
+                assert table.has_primary_key(key, conn)
             print('checking missing keys...')
             for key in notpresent:
                 print(key)
-                assert not table.has_key(key, conn)
+                assert not table.has_primary_key(key, conn)
         conn.close()
 
     def test_database_connection_manage(self):
         db = PGDataBase(creds)
-        with db.get_connection() as conn:
+        with db.connection() as conn:
             assert not conn.closed
             assert conn not in db._connection_pool
         assert conn in db._connection_pool
 
         try:
-            with db.get_connection() as conn:
+            with db.connection() as conn:
                 assert 0
         except AssertionError:
             pass
 
         for connection in db._connection_pool:
             assert connection.closed
+
+    def test_table_creation(self):
+        db = PGDataBase(creds)
+        with db.connection() as conn:
+            db.create_table('Test_table', 'x int primary key', conn)
+        assert 'Test_table' in db.tables
