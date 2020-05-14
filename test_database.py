@@ -152,4 +152,18 @@ class Test_database:
                 assert not table.has_key(key, conn)
         conn.close()
 
+    def test_database_connection_manage(self):
+        db = PGDataBase(creds)
+        with db.get_connection() as conn:
+            assert not conn.closed
+            assert conn not in db._connection_pool
+        assert conn in db._connection_pool
 
+        try:
+            with db.get_connection() as conn:
+                assert 0
+        except AssertionError:
+            pass
+
+        for connection in db._connection_pool:
+            assert connection.closed

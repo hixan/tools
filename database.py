@@ -3,7 +3,7 @@ from psycopg2 import connect  # type: ignore
 from psycopg2.extensions import Column, connection as Connection  # type: ignore
 import psycopg2.errors as pge  # type: ignore
 from typing import (Union, Mapping, Sequence, Iterable, TypeVar, Tuple, Deque,
-                    Dict, Optional, Collection)
+                    Dict, Optional, Collection, List)
 from itertools import chain
 from .tools import batch
 from collections import deque
@@ -20,6 +20,7 @@ class PGDataBase:
         self._credentials = credentials
         self.tables: Dict[str, PGDataBase.Table] = {}
         self._init_tables()
+        self._connection_pool: List[Connection] = []
 
     def _init_tables(self):
         ''' syncronisis tables with the database '''
@@ -74,6 +75,29 @@ class PGDataBase:
             connection.commit()
             connection.close()
         self._init_tables()
+
+    def get_connection(self):
+        return PGDataBase._ConnectionHandler(self)
+
+    class _ConnectionHandler:
+        ''' handle the connection safely closing with exceptions and
+        efficiently allocate to tasks (if multiprocessing / nesting) '''
+
+        def __init__(self, db):
+            self._db = db
+
+        def __enter__(self):
+            if len(self._db._connection_pool) == 0:
+                self._db._connection_pool.append(self._db.connect())
+            self.connection = self._db._connection_pool.pop()
+            return self.connection
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            print(exc_type, exc_value, traceback)
+            self._db._connection_pool.append(self.connection)
+            if exc_type is not None:
+                for connection in self._db._connection_pool:
+                    connection.close()
 
     class Table:
         ''' table always manages its transactions '''
