@@ -1,17 +1,21 @@
 from psycopg2 import connect
 from psycopg2.extensions import Column, connection as Connection  # Capitalise for readability as object
-from typing import Union, Mapping, Sequence, Iterable, TypeVar, Tuple
+import psycopg2.errors as pge
+from typing import Union, Mapping, Sequence, Iterable, TypeVar, Tuple, Deque, Dict
+from itertools import chain
 from .tools import batch
+from collections import deque
 
 
 Value = Union[bool, int, float, str]  # value of a returned database object
 T = TypeVar('T')
 
+
 class PGDataBase:
 
     def __init__(self, credentials):
         self._credentials = credentials
-        self.tables = {}
+        self.tables: Dict[str, PGDataBase.Table] = {}
         self._init_tables()
 
     def _init_tables(self):
@@ -28,7 +32,7 @@ class PGDataBase:
         for t in set(self.tables.keys()) - present:
             del self.tables[t]
 
-    def _get_tables(self):
+    def _get_tables(self) -> Sequence[str]:
         '''
         retrieve table names from the database. Does not commit. Is not a
         generator.
@@ -44,7 +48,7 @@ class PGDataBase:
             rv = cursor.fetchall()
         return [t[0] for t in rv]
 
-    def _connect(self):
+    def _connect(self) -> Connection:
         return connect(**self._credentials)
 
     def create_table(
@@ -101,11 +105,54 @@ class PGDataBase:
         def __contains__(self, primary_key: Sequence[Value]):
             if len(primary_key) != 0:
                 pass
-            return
 
-        def insert_rows(self, rows, connection: Connection, batch_size=20):
-            pass
+        def insert_rows(
+                self,
+                columns: Sequence[str],
+                rows: Iterable[Tuple[str, ...]],
+                connection: Connection,
+                batch_size: int = 20
+        ):
+            ''' inserts rows in batches. (order is not guaranteed) '''
+            sql = f'insert into {self._tablename}({",".join(columns)}) values '
+            row_template = '(' + ','.join(['%s'] * len(columns)) + ')'
+            normal_template = sql + ','.join([row_template] * batch_size)
+            handler_queue: Deque[Tuple[str, ...]] = deque()
 
+            curs = connection.cursor()
+
+            # insert in batches
+            for b in batch(rows, batch_size):
+                # attempt to insert batch
+                curs.execute('savepoint start_batch')
+                try:
+                    if len(b) == batch_size:
+                        curs.execute(normal_template, tuple(chain.from_iterable(b)))
+                    else:
+                        curs.execute(sql + ','.join([row_template] * len(b)),
+                                     tuple(chain.from_iterable(b)))
+
+                    curs.execute('release savepoint start_batch')
+                except (pge.DataError, pge.IntegrityError):
+                    # add batch to the queue to be handled later
+                    handler_queue.extend(b)
+                    # roll back to clean state
+                    curs.execute('rollback to savepoint start_batch')
+
+            retval = []
+            # handle the queue
+            for row in handler_queue:
+                curs.execute('savepoint start_insert')
+                try:
+                    curs.execute(sql+row_template, row)
+                except (pge.DataError, pge.IntegrityError):
+                    retval.append(row)  # this row could not be inserted
+                    curs.execute('rollback to savepoint start_insert')
+                curs.execute('release savepoint start_insert')
+
+            curs.close()
+            connection.commit()
+            return retval
 
         def __len__(self):
             raise NotImplementedError
