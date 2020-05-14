@@ -1,7 +1,9 @@
-from psycopg2 import connect
-from psycopg2.extensions import Column, connection as Connection  # Capitalise for readability as object
-import psycopg2.errors as pge
-from typing import Union, Mapping, Sequence, Iterable, TypeVar, Tuple, Deque, Dict
+from psycopg2 import connect  # type: ignore
+# Capitalise for readability as object
+from psycopg2.extensions import Column, connection as Connection  # type: ignore
+import psycopg2.errors as pge  # type: ignore
+from typing import (Union, Mapping, Sequence, Iterable, TypeVar, Tuple, Deque,
+                    Dict, Optional, Collection)
 from itertools import chain
 from .tools import batch
 from collections import deque
@@ -21,7 +23,7 @@ class PGDataBase:
     def _init_tables(self):
         ''' syncronisis tables with the database '''
         # fetch table information
-        tableconn = self._connect()
+        tableconn = self.connect()
         present = set()
         for table in self._get_tables():
             self.tables[table] = self.Table(table, tableconn)
@@ -37,7 +39,7 @@ class PGDataBase:
         retrieve table names from the database. Does not commit. Is not a
         generator.
         '''
-        with self._connect().cursor() as cursor:
+        with self.connect().cursor() as cursor:
             cursor.execute(
                 """
                 SELECT relname
@@ -48,7 +50,7 @@ class PGDataBase:
             rv = cursor.fetchall()
         return [t[0] for t in rv]
 
-    def _connect(self) -> Connection:
+    def connect(self) -> Connection:
         return connect(**self._credentials)
 
     def create_table(
@@ -63,7 +65,7 @@ class PGDataBase:
         '''
         if connection is None:
             commit = True
-            connection = self._connect()
+            connection = self.connect()
         with connection.cursor() as cur:
             cur.execute(sql)
 
@@ -80,6 +82,7 @@ class PGDataBase:
             cols = self._fetch_columns(connection)
             self.columns: Mapping[str, Column] = {c.name: c for c in cols}
             self.primary_key = self._fetch_pks(connection)
+            self._pk_cache: Optional[Collection[Tuple[Value, ...]]] = None
             print(self.primary_key)
             connection.commit()
 
@@ -102,9 +105,11 @@ class PGDataBase:
                 res = cursor.fetchall()
             return [r[0] for r in res]  # unpack the keys
 
-        def __contains__(self, primary_key: Sequence[Value]):
-            if len(primary_key) != 0:
-                pass
+        def has_key(self, primary_key: Sequence[Value], connection: Connection):
+            # fetch cache if necessary
+            if self._pk_cache is None:
+                self._pk_cache = set(self.select(self.primary_key, connection))
+            return primary_key in self._pk_cache
 
         def insert_rows(
                 self,
@@ -120,6 +125,9 @@ class PGDataBase:
             handler_queue: Deque[Tuple[str, ...]] = deque()
 
             curs = connection.cursor()
+
+            # reset pk cache
+            self._pk_cache = None
 
             # insert in batches
             for b in batch(rows, batch_size):
@@ -156,3 +164,18 @@ class PGDataBase:
 
         def __len__(self):
             raise NotImplementedError
+
+        def select(
+                self, columns: Sequence[str], connection: Connection,
+                where: Sequence[str] = None, limit: int = None
+        ) -> Iterable[Tuple[Value, ...]]:
+            sql = f'SELECT {",".join(columns)} FROM {self._tablename}{{where}}{{limit}}'
+            sql = sql.format(where=' AND '.join(where) if where is not None else '',
+                             limit=f' LIMIT {limit}' if limit is not None else '')
+            with connection.cursor() as curs:
+                curs.execute(sql)
+                while True:
+                    res = curs.fetchone()
+                    if res is None:
+                        break
+                    yield res

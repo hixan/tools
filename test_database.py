@@ -1,7 +1,7 @@
-from psycopg2 import connect
-from .database import PGDataBase
+from psycopg2 import connect  # type: ignore
+from .database import PGDataBase  # type: ignore
 import json
-import pytest
+import pytest  # type: ignore
 
 # in order for this testing module to work, a credentials file must be created
 # pointing to an empty (and unused) postgres SQL database. THE TESTS WILL
@@ -68,51 +68,28 @@ class Test_database:
 
     @pytest.mark.parametrize('batch_size', (4, 2, 1, 10000))
     @pytest.mark.parametrize(
-        "table_defn,columns_inserted,rows_inserted,rows_actual,rows_missing",
-        [
-            (  # test 1
-                'x int primary key, y char(1)',  # table definition
-                ('x', 'y'),  # columns inserted
-                (  # rows inserted
-                    (1, 'c'), (2, 'b'), (3, 'c'), (4, 'a')
-                ),
-                (  # rows actual
-                    (1, 'c'), (2, 'b'), (3, 'c'), (4, 'a')
-                ),
-                (),  # rows missing
-            ),
-            (  # test 2
-                'x int, y int, z char(1), primary key (x, z)',
-                ('x', 'z'),
-                (
-                    (1, 'c'), (2, 'b'), (3, 'c'), (4, 'a')
-                ),
-                (
-                    (1, None, 'c'), (2, None, 'b'), (3, None, 'c'),
-                    (4, None, 'a')
-                ),
-                ()
-            ),
+        "table_defn,columns_inserted,rows_inserted,rows_actual,rows_missing", [
             (
                 'x int primary key, y char(1)',
                 ('x', 'y'),
-                (
-                    (1, 'c'), (2, 'b'), (2, 'c'),  # duplicate shouldnt work
-                    (3, 'c'), (4, 'a')
-                ),
-                (
-                    (1, 'c'), (2, 'b'), (3, 'c'), (4, 'a')
-                ),
-                ((2, 'c'),)
+                ((1, 'c'), (2, 'b'), (3, 'c'), (4, 'a')),
+                ((1, 'c'), (2, 'b'), (3, 'c'), (4, 'a')),
+                (),
             ),
-        ]
-    )
+            ('x int, y int, z char(1), primary key (x, z)', ('x', 'z'),
+             ((1, 'c'), (2, 'b'), (3, 'c'),
+              (4, 'a')), ((1, None, 'c'), (2, None, 'b'), (3, None, 'c'),
+                          (4, None, 'a')), ()),
+            ('x int primary key, y char(1)', ('x', 'y'),
+             ((1, 'c'), (2, 'b'), (2, 'c'), (3, 'c'), (4, 'a')),
+             ((1, 'c'), (2, 'b'), (3, 'c'), (4, 'a')), ((2, 'c'), )),
+        ])
     def test_insert(self, table_defn, columns_inserted, rows_inserted,
                     rows_actual, rows_missing, batch_size):
         db = PGDataBase(creds)
         db.create_table('my_table', table_defn)
         table = db.tables['my_table']
-        c = db._connect()
+        c = db.connect()
         missing_rows = table.insert_rows(columns_inserted, rows_inserted, c,
                                          batch_size)
         curs = c.cursor()
@@ -134,6 +111,7 @@ class Test_database:
 
         assert self.sequences_equal(res, rows_actual)
         assert self.sequences_equal(rows_missing, missing_rows)
+        # TODO test non-committing (by passing connection through)
 
     @staticmethod
     def sequences_equal(a, b):
@@ -147,6 +125,31 @@ class Test_database:
             return False
         return True
 
-    def test_key_present(self):
+    @pytest.mark.parametrize(
+        'table_defn,columns_inserted,rows_inserted,notpresent',
+        [(  # test 1
+            'x int, y char(1), z int, primary key (x, z)',
+            ('x', 'y', 'z'),
+            ((1, 'a', 1), (1, 'a', 2)),
+            ((2, 5), (1, 0), (1,), 1, (2,), (2, 2), (2, 1))
+        )])
+    def test_key_present(self, table_defn, columns_inserted, rows_inserted,
+                         notpresent):
         db = PGDataBase(creds)
-        raise NotImplementedError
+        db.create_table('my_table', table_defn)
+        table = db.tables['my_table']
+
+        with db.connect() as conn:
+            table.insert_rows(columns_inserted, rows_inserted, conn)
+            present_keys = list(table.select(table.primary_key, conn, limit=None))
+            print('checking present keys...')
+            for key in present_keys:
+                print(key)
+                assert table.has_key(key, conn)
+            print('checking missing keys...')
+            for key in notpresent:
+                print(key)
+                assert not table.has_key(key, conn)
+        conn.close()
+
+
