@@ -1,4 +1,5 @@
 from psycopg2 import connect  # type: ignore
+from psycopg2 import errors as pge
 from .database import PGDataBase  # type: ignore
 import json
 import pytest  # type: ignore
@@ -168,9 +169,20 @@ class Test_database:
             assert not conn.closed
             with conn.cursor() as curs:
                 curs.execute('select 1')
-
         for connection in db._connection_pool:
             assert not connection.closed
+        try:
+            with db.connection() as conn:
+                conn.cursor().execute('invalidcommand')
+        except pge.ProgrammingError:
+            pass
+
+        for connection in db._connection_pool:
+            with connection.cursor() as cursor:
+                cursor.execute('select 1')
+        for connection in db._connection_pool:
+            with connection.cursor() as cursor:
+                cursor.execute('select 1')
         db.disconnect_all()
         assert len(db._connection_pool) == 0
 
