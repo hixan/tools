@@ -177,7 +177,7 @@ class PGDataBase:
                 res = cursor.fetchall()
             return [r[0] for r in res]  # unpack the keys
 
-        def has_primary_key(self, primary_key: Sequence[Value], connection: Connection):
+        def has_primary_key(self, primary_key: Tuple[Value, ...], connection: Connection):
             ''' returns true if the table contains a row with that primary key
             '''
             # fetch cache if necessary
