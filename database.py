@@ -18,6 +18,12 @@ T = TypeVar('T')
 class PGDataBase:
 
     def __init__(self, credentials):
+        ''' Create a database object to communicate with the database
+        at <credentials>. Credentials follows the psycopg2.connect
+        standard, and so needs:
+            port (if not default), database, host, user and password.
+        See psycopg2.connect for more details
+        '''
         self._credentials = credentials
         self._tables: Dict[str, PGDataBase.Table] = {}
         self._connection_pool: List[Connection] = []
@@ -29,7 +35,7 @@ class PGDataBase:
         atexit.register(self.disconnect_all)
 
     def _init_tables(self, connection):
-        ''' syncronisis tables with the database '''
+        ''' syncronisis tables map with the database '''
         # fetch table information
         present = set()
         for table in self._get_tables(connection):
@@ -59,14 +65,19 @@ class PGDataBase:
         return [t[0] for t in rv]
 
     def __getitem__(self, key: str):
+        '''
+        case insensitive indexing of the tables contained by the database
+        '''
         return self._tables[key.lower()]
 
     def __contains__(self, table: str):
+        ''' case insensitive containment test '''
         return table.lower() in self._tables
 
     def __iter__(self):
+        ''' item retrieval (with case fixing) '''
         for item in self._tables:
-            yield item
+            yield item.title()
 
     def create_table(
             self,
@@ -74,7 +85,7 @@ class PGDataBase:
             columnsdef: str,
             connection: Connection = None,
     ):
-        ''' commits at the end of table creation '''
+        ''' Create a table in the database. THIS METHOD COMMITS CHANGES '''
         sql = f'''CREATE TABLE {name} (
         {columnsdef}
         )
@@ -95,34 +106,52 @@ class PGDataBase:
             cmgr.__exit__(None, None, None)
 
     def disconnect_all(self):
+        ''' close all connections to the database. This is automatically called
+        on exit. '''
         for conn in self._connection_pool:
             conn.close()
         self._connection_pool = []
 
     def connection(self):
+        ''' context manager for accessing connections to the database. Treat
+        like psycopg2.connection
+        >>> with db.connection() as connection:
+        ...     # do stuff with conneciton, which is open
+        ... # connections latest transaction is now committed.
+
+        The connection should not be accessed after the with block as it is now
+        owned by the database and not the current thread, and it may get lent
+        again to another context while you are accessing it.
+        '''
         return PGDataBase._ConnectionHandler(self)
 
     class _ConnectionHandler:
-        ''' handle the connection safely closing with exceptions and
-        efficiently allocate to tasks (if multiprocessing / nesting) '''
 
         def __init__(self, db):
+            ''' Should not access this class directly. Use factory function
+            'PGDataBase.connection()'.
+            handle the connection safely closing with exceptions and
+            efficiently allocate to tasks (if multiprocessing / nesting) '''
             self._db = db
 
         def __enter__(self):
+            ''' enters this context and the connections context '''
             if len(self._db._connection_pool) == 0:
                 self._db._connection_pool.append(connect(**self._db._credentials))
                 self._db._opened_count += 1
             self.connection = self._db._connection_pool.pop()
-            return self.connection
+            return self.connection.__enter__()
 
         def __exit__(self, exc_type, exc_value, traceback):
-            self.connection.commit()
+            ''' exits this context and the connections context '''
+            self.connection.__exit__(exc_type, exc_value, traceback)
             self._db._connection_pool.append(self.connection)
 
     class Table:
 
         def __init__(self, table: str, connection: Connection):
+            ''' should not access this class directly, instead use the
+            create_table method or the refresh method. '''
             self._tablename = table
             cols = self._fetch_columns(connection)
             self.columns: Mapping[str, Column] = {c.name: c for c in cols}
@@ -149,6 +178,8 @@ class PGDataBase:
             return [r[0] for r in res]  # unpack the keys
 
         def has_primary_key(self, primary_key: Sequence[Value], connection: Connection):
+            ''' returns true if the table contains a row with that primary key
+            '''
             # fetch cache if necessary
             if self._pk_cache is None:
                 self._pk_cache = set(self.select(self.primary_key, connection))
@@ -161,7 +192,8 @@ class PGDataBase:
                 connection: Connection,
                 batch_size: int = 20
         ):
-            ''' inserts rows in batches. (order is not guaranteed) '''
+            ''' inserts rows in batches. (order is not guaranteed) Returns rows
+            that it could not insert. DOES NOT COMMIT '''
             sql = f'insert into {self._tablename}({",".join(columns)}) values '
             row_template = '(' + ','.join(['%s'] * len(columns)) + ')'
             normal_template = sql + ','.join([row_template] * batch_size)
@@ -207,7 +239,20 @@ class PGDataBase:
                 self, columns: Sequence[str], connection: Connection,
                 where: Sequence[str] = None, limit: int = None
         ) -> Iterable[Tuple[Value, ...]]:
-            sql = f'SELECT {",".join(columns)} FROM {self._tablename}{{where}}{{limit}}'
+            ''' simple implementation of SQL select, IS NOT SQL INJECTION SAFE
+
+            :param where: sequence of strings that correspond to conditions
+            that must be true.
+            :param limit: number of lines to return. None returns all.
+            :return: generator of resultant rows.
+
+            Since this returns a generator, the connection must be dedicated to
+            this process while it still going to return new values.
+
+            TODO allow argument passing to protect against SQL injection '''
+            sql = f'''SELECT {",".join(columns)} FROM {self._tablename}
+            {{where}}
+            {{limit}}'''
             sql = sql.format(where=' AND '.join(where) if where is not None else '',
                              limit=f' LIMIT {limit}' if limit is not None else '')
             with connection.cursor() as curs:
