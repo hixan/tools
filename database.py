@@ -139,7 +139,10 @@ class PGDataBase:
             if len(self._db._connection_pool) == 0:
                 self._db._connection_pool.append(connect(**self._db._credentials))
                 self._db._opened_count += 1
+            # get an open connection and discard closed connections
             self.connection = self._db._connection_pool.pop()
+            while self.connection.closed:
+                self.connection = self._db._connection_pool.pop()
             return self.connection.__enter__()
 
         def __exit__(self, exc_type, exc_value, traceback):
@@ -199,6 +202,8 @@ class PGDataBase:
             normal_template = sql + ','.join([row_template] * batch_size)
             handler_queue: Deque[Tuple[str, ...]] = deque()
 
+            inserted_count = 0
+
             with connection.cursor() as curs:
 
                 # reset pk cache
@@ -211,9 +216,11 @@ class PGDataBase:
                     try:
                         if len(b) == batch_size:
                             curs.execute(normal_template, tuple(chain.from_iterable(b)))
+                            inserted_count += batch_size
                         else:
                             curs.execute(sql + ','.join([row_template] * len(b)),
-                                        tuple(chain.from_iterable(b)))
+                                         tuple(chain.from_iterable(b)))
+                            inserted_count += len(b)
 
                         curs.execute('release savepoint start_batch')
                     except (pge.DataError, pge.IntegrityError):
@@ -228,12 +235,13 @@ class PGDataBase:
                     curs.execute('savepoint start_insert')
                     try:
                         curs.execute(sql+row_template, row)
-                    except (pge.DataError, pge.IntegrityError):
-                        retval.append(row)  # this row could not be inserted
+                        inserted_count += 1
+                    except (pge.DataError, pge.IntegrityError) as e:
+                        retval.append((row, e))  # this row failed
                         curs.execute('rollback to savepoint start_insert')
                     curs.execute('release savepoint start_insert')
 
-            return retval
+            return inserted_count, retval
 
         def select(
                 self, columns: Sequence[str], connection: Connection,
