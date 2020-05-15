@@ -144,8 +144,13 @@ class PGDataBase:
 
         def __exit__(self, exc_type, exc_value, traceback):
             ''' exits this context and the connections context '''
-            self.connection.__exit__(exc_type, exc_value, traceback)
-            self._db._connection_pool.append(self.connection)
+            try:
+                self.connection.__exit__(exc_type, exc_value, traceback)
+            except pge.InterfaceError:
+                pass
+
+            if not self.connection.closed:
+                self._db._connection_pool.append(self.connection)
 
     class Table:
 

@@ -182,3 +182,10 @@ class Test_database:
             assert 'test_table' in db
         assert 'Test_table' in db
         db['Test_table']
+
+    def test_closed_connection(self):
+        db = PGDataBase(creds)
+        with db.connection() as conn:
+            conn.close()
+        with db.connection() as conn:
+            assert not conn.closed
