@@ -19,7 +19,7 @@ class PGDataBase:
 
     def __init__(self, credentials):
         self._credentials = credentials
-        self.tables: Dict[str, PGDataBase.Table] = {}
+        self._tables: Dict[str, PGDataBase.Table] = {}
         self._connection_pool: List[Connection] = []
         self._opened_count = 0
         with self.connection() as conn:
@@ -33,12 +33,12 @@ class PGDataBase:
         # fetch table information
         present = set()
         for table in self._get_tables(connection):
-            self.tables[table] = self.Table(table, connection)
+            self._tables[table] = self.Table(table, connection)
             present.add(table)
 
         # remove missing tables
-        for t in set(self.tables.keys()) - present:
-            del self.tables[t]
+        for t in set(self._tables.keys()) - present:
+            del self._tables[t]
 
     def _get_tables(
             self, connection: Connection
@@ -58,13 +58,23 @@ class PGDataBase:
             rv = cursor.fetchall()
         return [t[0] for t in rv]
 
+    def __getitem__(self, key: str):
+        return self._tables[key.lower()]
+
+    def __contains__(self, table: str):
+        return table.lower() in self._tables
+
+    def __iter__(self):
+        for item in self._tables:
+            yield item
+
     def create_table(
             self,
             name: str,
             columnsdef: str,
             connection: Connection = None,
     ):
-        ''' does not commit '''
+        ''' commits at the end of table creation '''
         sql = f'''CREATE TABLE {name} (
         {columnsdef}
         )
@@ -77,6 +87,7 @@ class PGDataBase:
 
         with connection.cursor() as cur:
             cur.execute(sql)
+        connection.commit()
 
         self._init_tables(connection)
 
@@ -117,7 +128,6 @@ class PGDataBase:
             self.columns: Mapping[str, Column] = {c.name: c for c in cols}
             self.primary_key = self._fetch_pks(connection)
             self._pk_cache: Optional[Collection[Tuple[Value, ...]]] = None
-            print(self.primary_key)
 
         def _fetch_columns(self, connection: Connection):
             with connection.cursor() as cursor:
