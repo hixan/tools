@@ -1,3 +1,4 @@
+import inspect
 import matplotlib.pyplot as plt
 from pathlib import Path
 from timeit import default_timer as timer
@@ -190,3 +191,14 @@ def remove_outliers(df, column, low_percentile=0, high_percentile=1):
     low_cutoff = df[column].quantile(low_percentile)
     high_cutoff = df[column].quantile(high_percentile)
     return df[(df[column] >= low_cutoff) & (df[column] <= high_cutoff)]
+
+
+def debug_print(*args, **kwargs):
+    # ignore printing to a file
+    if 'file' in kwargs:
+        print(*args, **kwargs)
+    
+    frame = inspect.stack()[1][0]
+    info = inspect.getframeinfo(frame)
+    print(info.filename, info.code_context, info.function, info.lineno,
+            ':', *args, **kwargs)
