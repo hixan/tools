@@ -204,6 +204,20 @@ def debug_print(*args, **kwargs):
             ':', *args, **kwargs)
 
 
+def var_covar_matrix(X, mean=None, axis=0):
+    assert len(X.shape) == 2, 'must operate on a matrix of 2 dimensions'
+    # assumes rows of X are data and columns are variables
+    if mean is None:
+        mean = np.mean(X, axis=axis)
+    diff = X - mean
+
+    # sum of outer products for each vector divided by the number of vectors
+    if axis == 0:
+        return (diff.T @ diff) / X.shape[0]
+    elif axis == 1:
+        return (diff @ diff.T) / X.shape[1]
+    raise ValueError('axis must 0 or 1')
+
 def sm_apply(eqn, *methods):
     '''
     apply methods to sympy equation. A method is defined as follows:
