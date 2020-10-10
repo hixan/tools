@@ -202,3 +202,17 @@ def debug_print(*args, **kwargs):
     info = inspect.getframeinfo(frame)
     print(info.filename, info.code_context, info.function, info.lineno,
             ':', *args, **kwargs)
+
+
+def sm_apply(eqn, *methods):
+    '''
+    apply methods to sympy equation. A method is defined as follows:
+
+    (callable method, *arguments, dict(**kwargs))
+    '''
+    rv = eqn
+    for method, *args, kwargs in methods:
+        print(*args, kwargs)
+        rv = method(eqn, *args, **kwargs)
+    return rv
+
