@@ -218,6 +218,13 @@ def var_covar_matrix(X, mean=None, axis=0):
         return (diff @ diff.T) / X.shape[1]
     raise ValueError('axis must 0 or 1')
 
+
+def iterable_filter(filter):
+    def rv(gen):
+        return (value for value in gen if filter(value))
+    return rv
+
+
 def sm_apply(eqn, *methods):
     '''
     apply methods to sympy equation. A method is defined as follows:
