@@ -206,17 +206,19 @@ def debug_print(*args, **kwargs):
 
 def var_covar_matrix(X, mean=None, axis=0):
     assert len(X.shape) == 2, 'must operate on a matrix of 2 dimensions'
-    # assumes rows of X are data and columns are variables
+    if axis == 1:  # calculate on transpose
+        return var_covar_matrix(X.T, mean=mean)
+    elif axis != 0:
+        raise ValueError('axis must 0 or 1')
+    # axis is now == 0
+
     if mean is None:
         mean = np.mean(X, axis=axis)
     diff = X - mean
 
     # sum of outer products for each vector divided by the number of vectors
-    if axis == 0:
-        return (diff.T @ diff) / X.shape[0]
-    elif axis == 1:
-        return (diff @ diff.T) / X.shape[1]
-    raise ValueError('axis must 0 or 1')
+    rv = (diff.T @ diff) / X.shape[0]
+    return rv
 
 
 def iterable_filter(filter):
