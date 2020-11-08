@@ -1,12 +1,18 @@
-from psycopg2 import connection as Connection  # Capitalise for readability as object
+from psycopg2.extensions import connection as Connection  # Capitalise for readability as object
 from psycopg2.errors import DatabaseError, ProgrammingError
 from logging import Logger
-from typing import Optional, List, Sequence, Generator, Union, Iterable
+from typing import Optional, List, Sequence, Generator, Union, Iterable, Iterator, Callable
+from itertools import chain
+import numpy as np
+import abc
 
 
 LOGGER: Optional[Logger] = None  # global, can be a logging.logger object
 
+# Custom Types
 Value = Union[bool, int, float, str]
+
+Row = Iterable[Value]
 
 
 def dbexec(
@@ -116,7 +122,7 @@ def add_rows(connection: Connection, tablename: str, values: Iterable[List[str]]
 
     for row in it:
         try:
-            pgexec(connection,
+            dbexec(connection,
                    sqlcmd,
                    args=row,
                    msg=f'Insert row to {tablename}')
