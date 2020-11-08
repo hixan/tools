@@ -128,6 +128,15 @@ def plot_frequencies(categorical):
     plt.xticks(x, labels=labels)
 
 
+def confusion_matrix(true, pred, labels=None):
+    if labels is None:
+        labels = list(set(true))
+    rv = np.zeros([len(labels)]*2)
+    for t, p in zip(true, pred):
+        rv[labels.index(p), labels.index(t)] += 1
+    return rv
+
+
 def plot_confusion_matrix(mat, labels):
     '''
     :param mat: confusion matrix

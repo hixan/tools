@@ -31,4 +31,15 @@ def test_var_covar_matrix():
     # calculate on other axis
     got = var_covar_matrix(data.T, axis=1)
 
+def test_confusion_matrix():
+    Y = [1, 2, 3, 2, 3]
+    p = [1, 3, 3, 2, 3]
+    m = confusion_matrix(Y, p, labels=[3, 1, 2])
+    print(m)
+    assert np.all(m == np.array([[2, 0, 1],
+                                 [0, 1, 0],
+                                 [0, 0, 1]]))
+
+
+
 
