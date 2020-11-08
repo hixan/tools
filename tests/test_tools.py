@@ -1,5 +1,5 @@
 import numpy as np
-from my_tools.tools import var_covar_matrix
+from my_tools.tools import var_covar_matrix, confusion_matrix
 
 np.set_printoptions(precision=2)
 

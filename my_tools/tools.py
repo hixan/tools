@@ -2,7 +2,7 @@ import inspect
 import matplotlib.pyplot as plt
 from pathlib import Path
 from timeit import default_timer as timer
-from collections import Counter
+from collections import Counter, defaultdict
 import numpy as np
 from functools import reduce
 import operator as op
@@ -248,3 +248,13 @@ def sm_apply(eqn, *methods):
         rv = method(eqn, *args, **kwargs)
     return rv
 
+
+calls = defaultdict(lambda : 0)
+def inspect_array(arr, name=''):
+    calls[name] += 1
+    print(f'''{name} {calls[name]}:
+    shape: {arr.shape}
+    dtype: {arr.dtype}
+    mean: {np.mean(arr)}
+    counter: {Counter(arr.flatten())}
+    ''')
