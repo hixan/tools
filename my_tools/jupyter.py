@@ -3,6 +3,19 @@ from matplotlib import pyplot as plt
 from itertools import chain
 
 class LivePlot:
+    """Live updates to a plot in jupyter notebook.
+
+    Usage (inside a jupyter notebook):
+
+    %matplotlib notebook
+    import time
+    liveplot = LivePlot(3, labels=list('abc'))
+    for i in range(10):
+        time.sleep(.1)
+        liveplot.update(
+            np.random.rand(3)
+        )
+    """
     
     def __init__(self, nseries, series=None, labels=None, colors=None, xlab='x axis', ylab='', title=''):
         
