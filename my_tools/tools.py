@@ -1,4 +1,5 @@
 import inspect
+import datetime
 import matplotlib.pyplot as plt
 from pathlib import Path
 from timeit import default_timer as timer
@@ -258,3 +259,53 @@ def inspect_array(arr, name=''):
     mean: {np.mean(arr)}
     counter: {Counter(arr.flatten())}
     ''')
+
+
+class Timer:
+    
+    def __init__(self, name=None, units='seconds'):
+        self.name = name
+        self.started = False
+        self.laps = []
+        
+        self.units = units
+        self.to_units = {
+            'seconds': lambda x: x.total_seconds(),
+        }[str(units)]
+        
+    def __enter__(self):
+        self.started = True
+        self.start = datetime.datetime.now()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        rv = self.lap()
+        self.started = False
+    
+    def lap(self):
+        '''Save a checkpoint for later access.'''
+        self.laps.append(self.get_time())
+        return self.laps[-1]
+    
+    def get_time(self):
+        '''get the current timer reading'''
+        if self.started:
+            return self.to_units(datetime.datetime.now() - self.start)
+        # return None otherwise
+
+    def __str__(self):
+        name = " " + repr(self.name) if self.name is not None else ""
+        if self.started:
+            return (f'Timer{name} at '
+                    f'{self.get_time()} {self.units}')
+        if len(self.laps) > 0:
+            return (f'Stopped Timer{name} at '
+                    f'{self.laps[-1]} {self.units}')
+        return f'Timer{name}'
+    
+    def time_taken(self):
+        '''get the total time taken (must be a timer that was started and
+        completed)'''
+        assert not self.started, f'Timer {repr(self.name)} still running!'
+        return self.laps[-1]
+
