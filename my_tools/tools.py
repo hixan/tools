@@ -317,17 +317,21 @@ def cachify(function):
     and load the file instead of re-computing if it has been.
 
     The wrapped function needs an additional argument: filename.
+    An optional extra argument 'overwrite' allows the function to always
+    recalculate and save output, overwriting previously cached calls.
     '''
     root = Path('./.cache')
     @wraps(function)  # keep original docstring and name
-    def rv(*args, filename=None, **kwargs):
+    def rv(*args, filename=None, overwrite=False, **kwargs):
         # sanitize filename (construct default)
         if filename is None:
-            raise ValueError('Cachified function must have an additional '
-                    'filename argument')
+            raise TypeError(f'{function.__name__} missing 1 required keyword '
+                    'argument: \'filename\'\n'
+                    'This argument is required as the function has been '
+                    'cachified.')
         
         file = root / filename
-        if file.exists():
+        if file.exists() and not overwrite:
             # load saved value
             with file.open('rb') as f:
                 return pickle.load(f)
