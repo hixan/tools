@@ -1,5 +1,7 @@
 import inspect
 import datetime
+import pickle
+from functools import wraps
 import matplotlib.pyplot as plt
 from pathlib import Path
 from timeit import default_timer as timer
@@ -308,4 +310,35 @@ class Timer:
         completed)'''
         assert not self.started, f'Timer {repr(self.name)} still running!'
         return self.laps[-1]
+
+
+def cachify(function):
+    '''Wrap function to save its returned value to a file if not previously run,
+    and load the file instead of re-computing if it has been.
+
+    The wrapped function needs an additional argument: filename.
+    '''
+    root = Path('./.cache')
+    @wraps(function)  # keep original docstring and name
+    def rv(*args, filename=None, **kwargs):
+        # sanitize filename (construct default)
+        if filename is None:
+            raise ValueError('Cachified function must have an additional '
+                    'filename argument')
+        
+        file = root / filename
+        if file.exists():
+            # load saved value
+            with file.open('rb') as f:
+                return pickle.load(f)
+        
+        fret = function(*args, **kwargs)
+
+        # save the value
+        with file.open('wb') as f:
+            pickle.dump(fret, f)
+
+        return fret
+
+    return rv
 
