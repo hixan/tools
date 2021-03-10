@@ -273,6 +273,74 @@ def composite(*f):
     return reduce(composite2, f)
 
 
+class DivCounter(Counter):
+    ''' a Counter object that supports log and power operations '''
+
+    def _operation(self, other, operation):
+
+        if issubclass(type(other), Counter):
+            return DivCounter({k: operation(self[k], other[k]) for k in self})
+        return DivCounter({k: operation(self[k], other) for k in self})
+
+    def __add__(self, other):
+        return self._operation(other, op.add)
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __mul__(self, other):
+        # only need to worry about the shortest as if an entry is missing
+        # multiplying by 0 results in nothing anyway
+
+        return self._operation(other, op.mul)
+
+    def __rmul__(self, other):
+        return self._operation(other, op.mul)
+
+    def __pow__(self, exponent):
+        return self._operation(exponent, op.pow)
+
+    def __rpow__(self, other):
+        return self._operation(other, lambda x, y: y ** x)
+
+    def __truediv__(self, other):
+        return self._operation(other, op.truediv)
+
+    def __rtruediv__(self, other):
+        return self._operation(other, lambda x, y: y / x)
+
+    def __gt__(self, other):
+        return self._operation(other, op.gt)
+
+    def __lt__(self, other):
+        return self._operation(other, op.lt)
+
+    def __rgt__(self, other):
+        return self.__lt__(other)
+
+    def __rlt__(self, other):
+        return self.__gt__(other)
+
+    def __ge__(self, other):
+        return self._operation(other, op.ge)
+
+    def __le__(self, other):
+        return self._operation(other, op.le)
+
+    def __rge__(self, other):
+        return self.__le__(other)
+
+    def __rle__(self, other):
+        return self.__ge__(other)
+
+    # numpy log
+    def log(self):
+        new = DivCounter()
+        for v in self:
+            new[v] = np.log(self[v])
+        return new
+
+
 class Timer:
     
     def __init__(self, name=None, units='seconds'):
