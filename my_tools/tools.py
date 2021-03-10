@@ -263,6 +263,16 @@ def inspect_array(arr, name=''):
     ''')
 
 
+def composite2(f, g):
+    def rv(*x, **y):
+        return f(g(*x, **y))
+    return rv
+
+
+def composite(*f):
+    return reduce(composite2, f)
+
+
 class Timer:
     
     def __init__(self, name=None, units='seconds'):
