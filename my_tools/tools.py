@@ -273,6 +273,29 @@ def composite(*f):
     return reduce(composite2, f)
 
 
+class pospartial:
+
+    def __init__(self, callable, *args, **kwargs):
+        self.kwargs = kwargs
+        self.args = args
+        self.callable = callable
+
+    def __call__(self, *args, **kwargs):
+        arglist = []
+        argiter = iter(args)
+        for arg in self.args:
+            if arg is ...:
+                try:
+                    arglist.append(next(argiter))
+                except StopIteration:
+                    raise ValueError(f'{self.callable.__name__} '
+                    'expected more positional arguments')
+            else:
+                arglist.append(arg)
+        arglist.extend(argiter)
+        return self.callable(*arglist, **kwargs)
+
+
 class DivCounter(Counter):
     ''' a Counter object that supports log and power operations '''
 
