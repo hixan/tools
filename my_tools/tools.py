@@ -331,6 +331,18 @@ class DivCounter(Counter):
         return new
 
 
+class BColors:
+    c1 = '\033[95m'
+    c2 = '\033[94m'
+    c3 = '\033[96m'
+    c4 = '\033[92m'
+    c5 = '\033[93m'
+    c6 = '\033[91m'
+    c7 = '\033[0m'
+    c8 = '\033[1m'
+    c9 = '\033[4m'
+
+
 class Timer:
     
     def __init__(self, name=None, units='seconds'):
@@ -380,6 +392,7 @@ class Timer:
         return self.laps[-1]
 
 
+"""
 def cachify(function):
     '''Wrap function to save its returned value to a file if not previously run,
     and load the file instead of re-computing if it has been.
@@ -413,4 +426,5 @@ def cachify(function):
         return fret
 
     return rv
+"""
 
