@@ -186,8 +186,7 @@ class DefaultArgumentsFilter(logging.Filter):
         return True
 
 
-def init_logging(fp: Path,
-                 sql_db: Mapping[str, str] = None):
+def init_logging(fp: Path):
 
     logger = logging.Logger('')
 
