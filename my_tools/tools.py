@@ -1,16 +1,20 @@
 import inspect
+import hashlib
+import dill
 import datetime
 import pickle
-from functools import wraps
+from functools import wraps, reduce
 import matplotlib.pyplot as plt
 from pathlib import Path
 from timeit import default_timer as timer
 from collections import Counter, defaultdict
 import numpy as np
-from functools import reduce
+from functools import reduce, partial
 import operator as op
 import logging
+import os
 from typing import Callable, Mapping, Tuple, Sequence
+import base64
 
 
 def truncate(string: str, maxlength: int = 80, elipses: bool = True):
@@ -233,12 +237,6 @@ def var_covar_matrix(X, mean=None, axis=0):
     return rv
 
 
-def iterable_filter(filter):
-    def rv(gen):
-        return (value for value in gen if filter(value))
-    return rv
-
-
 def sm_apply(eqn, *methods):
     '''
     apply methods to sympy equation. A method is defined as follows:
@@ -261,39 +259,6 @@ def inspect_array(arr, name=''):
     mean: {np.mean(arr)}
     counter: {Counter(arr.flatten())}
     ''')
-
-
-def composite2(f, g):
-    def rv(*x, **y):
-        return f(g(*x, **y))
-    return rv
-
-
-def composite(*f):
-    return reduce(composite2, f)
-
-
-class pospartial:
-
-    def __init__(self, callable, *args, **kwargs):
-        self.kwargs = kwargs
-        self.args = args
-        self.callable = callable
-
-    def __call__(self, *args, **kwargs):
-        arglist = []
-        argiter = iter(args)
-        for arg in self.args:
-            if arg is ...:
-                try:
-                    arglist.append(next(argiter))
-                except StopIteration:
-                    raise ValueError(f'{self.callable.__name__} '
-                    'expected more positional arguments')
-            else:
-                arglist.append(arg)
-        arglist.extend(argiter)
-        return self.callable(*arglist, **kwargs)
 
 
 class DivCounter(Counter):
