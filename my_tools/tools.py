@@ -51,7 +51,10 @@ def truncate(string: str, maxlength: int = 80, elipses: bool = True):
     return rv
 
 
-def loudfunction(outputlen: int = 80, print_first: bool = True):
+def loudfunction(outputlen: int = None, print_first: bool = True):
+    if outputlen is None:
+        outputlen = int(os.environ['COLUMNS'])
+
     outputlen -= 2
     def rvfunc(function: Callable,
                print_first: bool = True,
@@ -123,7 +126,7 @@ def loudfunction(outputlen: int = 80, print_first: bool = True):
     return rvfunc
 
 
-def loudmethod(outputlen=80):
+def loudmethod(outputlen=None):
     return loudfunction(outputlen=outputlen, print_first=False)
 
 
