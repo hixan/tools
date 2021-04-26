@@ -83,7 +83,10 @@ def stagger(iterator: Iterator[T], offsets: Sequence[int] = (1,),
     for _ in range(maxoff):
         if not shortest:
             yield extractor(mem)
-        mem.append(next(iterator))
+        try:
+            mem.append(next(iterator))
+        except StopIteration:
+            return
 
     # yield most of the iterator
     while True:
