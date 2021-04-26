@@ -345,10 +345,11 @@ class BColors:
 
 class Timer:
     
-    def __init__(self, name=None, units='seconds'):
+    def __init__(self, name=None, units='seconds', print_exit: bool = False):
         self.name = name
         self.started = False
         self.laps = []
+        self.print_exit = print_exit
         
         self.units = units
         self.to_units = {
@@ -362,6 +363,8 @@ class Timer:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         rv = self.lap()
+        if self.print_exit:
+            print(self)
         self.started = False
     
     def lap(self):
