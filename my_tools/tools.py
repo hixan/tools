@@ -253,7 +253,7 @@ class loudfunction:
                 cls = list(reversed(cls))
             for col in cls:
                 rv += self.color_reset + col + lpipe
-            return rv, len(lpipe) * n_chars
+            return rv + self.color_reset, len(lpipe) * n_chars
         else:
             return lpipe * n_chars, len(lpipe) * n_chars
 
