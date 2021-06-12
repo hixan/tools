@@ -50,79 +50,79 @@ def truncate(string: str, maxlength: int = 80, elipses: bool = True):
     return rv
 
 
-def loudfunction(outputlen: int = None, print_first: bool = True):
-    if outputlen is None:
-        outputlen = int(os.environ['COLUMNS'])
-
-    outputlen -= 2
-    def rvfunc(function: Callable,
-               print_first: bool = True,
-               outputlen: int = outputlen):
-        def f(first, *args, **kwargs):
-            def print_args(args):
-                # possibly skip first argument
-                if print_first:
-                    printargs = first, *args
-                else:
-                    printargs = args
-
-                # print unnamed arguments
-                if len(printargs) > 0:
-                    # len(' -> ')
-                    fmt = '{value} -> {type}'
-                    for arg in printargs:
-                        t = type(arg).__name__
-                        v = str(arg)
-                        t = truncate(t, outputlen // 3)
-                        v = truncate(v, outputlen - len(t) - 4)
-                        print('│',
-                              f"{fmt.format(value=v, type=t): <{outputlen}}",
-                              '│', sep='')
-
-            def print_kwargs(kwargs):
-                # print named arguments: argname = 20 -> int
-                if len(kwargs) > 0:
-                    fmt = '{name} = {value} -> {type}'
-                    for argname in kwargs:
-                        value = kwargs[argname]
-                        olen = outputlen - 7
-                        # name is important - should be // 3
-                        n = truncate(argname, (olen // 2))
-                        t = truncate(type(value).__name__, olen - len(n) // 2)
-                        v = truncate(str(kwargs[argname]), olen - len(t) - len(n))
-                        print('│', f"{fmt.format(name=n, value=v, type=t): <{outputlen}}", '│', sep='')
-
-            # call function: -----start call to 'function'------
-
-            fname = f"'{function.__name__}'"
-            # print starting line ------fname-------
-            print('╒', truncate(f'{fname:═^{outputlen}}', maxlength=outputlen,
-                                elipses=False), '╕', sep='')
-            print_args(args)
-            print_kwargs(kwargs)
-            print('├', truncate(f'{"Start call "+fname:─^{outputlen}}',
-                                maxlength=outputlen),
-                  '┤', sep='')
-            st = timer()
-            rv = function(first, *args, **kwargs)
-            et = timer()
-            print('├', truncate(
-                f'{"End call "+fname+f" - {et-st:.2f}s elapsed":─^{outputlen}}',
-                maxlength=outputlen),
-                  '┤', sep='')
-            print_args(args)
-            print_kwargs(kwargs)
-            fmt = 'rv: {value} -> {type}'
-            olen = outputlen - 8
-            v = truncate(str(rv), olen // 2)
-            t = truncate(type(rv).__name__, olen - len(v))
-            print('│', f"{fmt.format(value=v, type=t): <{outputlen}}", '│', sep='')
-            print('╘', '═' * outputlen, '╛', sep='')
-            return rv
-
-        return f
-
-    return rvfunc
+#def loudfunction(outputlen: int = None, print_first: bool = True):
+#    if outputlen is None:
+#        outputlen = int(os.environ['COLUMNS'])
+#
+#    outputlen -= 2
+#    def rvfunc(function: Callable,
+#               print_first: bool = True,
+#               outputlen: int = outputlen):
+#        def f(first, *args, **kwargs):
+#            def print_args(args):
+#                # possibly skip first argument
+#                if print_first:
+#                    printargs = first, *args
+#                else:
+#                    printargs = args
+#
+#                # print unnamed arguments
+#                if len(printargs) > 0:
+#                    # len(' -> ')
+#                    fmt = '{value} -> {type}'
+#                    for arg in printargs:
+#                        t = type(arg).__name__
+#                        v = str(arg)
+#                        t = truncate(t, outputlen // 3)
+#                        v = truncate(v, outputlen - len(t) - 4)
+#                        print('│',
+#                              f"{fmt.format(value=v, type=t): <{outputlen}}",
+#                              '│', sep='')
+#
+#            def print_kwargs(kwargs):
+#                # print named arguments: argname = 20 -> int
+#                if len(kwargs) > 0:
+#                    fmt = '{name} = {value} -> {type}'
+#                    for argname in kwargs:
+#                        value = kwargs[argname]
+#                        olen = outputlen - 7
+#                        # name is important - should be // 3
+#                        n = truncate(argname, (olen // 2))
+#                        t = truncate(type(value).__name__, olen - len(n) // 2)
+#                        v = truncate(str(kwargs[argname]), olen - len(t) - len(n))
+#                        print('│', f"{fmt.format(name=n, value=v, type=t): <{outputlen}}", '│', sep='')
+#
+#            # call function: -----start call to 'function'------
+#
+#            fname = f"'{function.__name__}'"
+#            # print starting line ------fname-------
+#            print('╒', truncate(f'{fname:═^{outputlen}}', maxlength=outputlen,
+#                                elipses=False), '╕', sep='')
+#            print_args(args)
+#            print_kwargs(kwargs)
+#            print('├', truncate(f'{"Start call "+fname:─^{outputlen}}',
+#                                maxlength=outputlen),
+#                  '┤', sep='')
+#            st = timer()
+#            rv = function(first, *args, **kwargs)
+#            et = timer()
+#            print('├', truncate(
+#                f'{"End call "+fname+f" - {et-st:.2f}s elapsed":─^{outputlen}}',
+#                maxlength=outputlen),
+#                  '┤', sep='')
+#            print_args(args)
+#            print_kwargs(kwargs)
+#            fmt = 'rv: {value} -> {type}'
+#            olen = outputlen - 8
+#            v = truncate(str(rv), olen // 2)
+#            t = truncate(type(rv).__name__, olen - len(v))
+#            print('│', f"{fmt.format(value=v, type=t): <{outputlen}}", '│', sep='')
+#            print('╘', '═' * outputlen, '╛', sep='')
+#            return rv
+#
+#        return f
+#
+#    return rvfunc
 
 
 class loudfunction:
@@ -161,7 +161,7 @@ class loudfunction:
         self.columns = columns
         self._initialized = True
         self._file = file
-        self._pfa = print_first_arg
+        self._pfa_ix = int(not print_first_arg)
         self.stack: list[str] = []
         self.print_formats = print_formats
         self.color = file is None and color
@@ -201,7 +201,7 @@ class loudfunction:
                     start_inner_len, self.sections['double_pipe_horiz'])
                 print(start0 + start_inner_s + start1)
                 # arguments
-                print(self._arguments_section(args, kwargs, self.columns))
+                print(self._arguments_section(args[self._pfa_ix:], kwargs, self.columns))
                 # seperator
                 start0, slen0 = self._t_section_base(
                     right_key='right_single_single_t',
