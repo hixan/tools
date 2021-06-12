@@ -326,7 +326,7 @@ def strlen_printable(string: str) -> int:
 
 
 def loudmethod(outputlen=None):
-    return loudfunction(outputlen=outputlen, print_first=False)
+    return loudfunction(print_first_arg=False)
 
 
 def plot_frequencies(categorical):
