@@ -1,4 +1,5 @@
 import numpy as np
+from functools import cache
 from my_tools.tools import var_covar_matrix, confusion_matrix
 
 np.set_printoptions(precision=2)
@@ -39,6 +40,17 @@ def test_confusion_matrix():
     assert np.all(m == np.array([[2, 0, 1],
                                  [0, 1, 0],
                                  [0, 0, 1]]))
+
+def test_loudfunction_new():
+
+    @cache
+    def fib(n, *args, **kwargs):
+        if n <= 2:
+            return 1
+        return fib(n-1) + fib(n-2)
+    fib(3, x=3, abc=578, bdnotaehunoetckonteuhnoehhj='''hell
+                                 o''')
+    assert 0
 
 
 
