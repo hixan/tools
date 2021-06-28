@@ -1,7 +1,12 @@
 import operator as op
+from collections import OrderedDict
+import hashlib
+import pickle
 from collections import deque, Iterator as It
 from functools import reduce
-from typing import Iterator, TypeVar, Sequence
+from typing import Iterator, TypeVar, Sequence, Iterable
+from pathlib import Path
+from functools import wraps
 # generator/functional type tools
 
 
@@ -137,3 +142,117 @@ def composite(*f):
     return reduce(composite2, f)
 
 
+import inspect
+
+class DiskCache:
+
+    def __init__(self,
+                 cache_directory: str = '.cache',
+                 name_length: int = None,
+                 name_str: str = '{hash}',
+                 identifier_argument_name: str = 'cache_identifier',
+                 ):
+        self.name_length = name_length
+        self.cache_directory = Path(cache_directory)
+        self.argname = identifier_argument_name
+        self.name_str = name_str
+        print(self.cache_directory.resolve())
+
+        if not self.cache_directory.exists():
+            print('abc')
+            self.cache_directory.mkdir(parents=True, exist_ok=True)
+
+    def __call__(self, func):
+        fparams = inspect.signature(func).parameters
+        if self.argname in fparams:
+            raise ValueError(f'DiskCache cannot overwrite {func.__name__} '
+                             f'argument {self.argname}. Please provide an '
+                             f'alternative identifier_argument_name')
+
+        @wraps(func)
+        def rv(*args, **kwargs):
+            # get the name to save to
+            self._fill_defaults(args, kwargs, fparams)
+            cachefile = self._get_cachefile(args, kwargs)
+
+            if cachefile.exists():
+                # load the results
+                with cachefile.open('rb') as f:
+                    return pickle.load(f)
+            else:
+                # save the results
+                retv = func(*args, **kwargs)
+                with cachefile.open('wb') as f:
+                    pickle.dump(retv, f)
+                return retv
+        
+        return rv
+
+    def _fill_defaults(self, args: tuple, kwargs: dict,
+                       parameters: OrderedDict):
+        # fill in default values from kwargs that have not been consumed so all
+        # arguments are passed to the function
+        for n, p in list(parameters.items())[len(args):]:
+            if p.default is inspect._empty:  # type: ignore
+                continue  # ignore empty parameters
+            # update keyword arguments with default parameters if not contained
+            if n not in kwargs:
+                kwargs[n] = p.default
+
+    def _get_cachefile(self, args: tuple, kwargs: dict) -> Path:
+        # retrieve the Path object
+        if self.argname in kwargs:
+            rv = self.cache_directory / kwargs[self.argname]
+            del kwargs[self.argname]  # remove from keyword arguments
+            return rv
+        return self.cache_directory / self.name_str.format(hash=self._get_hash(args, kwargs))
+
+    def _get_hash(self, args: tuple, kwargs: dict) -> str:
+        # Attempts to hash all objects in args, kwargs to a stable hash.
+        # Raises a value error if this cannot be done.
+        hash = hashlib.sha512()
+        reduce(lambda x, y: 0, map(hash.update, self._make_hashable(args)))
+        reduce(lambda x, y: 0, map(hash.update, self._make_hashable((kwargs,))))
+        return hash.hexdigest()
+
+    def _make_hashable(self, args: Iterable) -> Iterator:
+        for a in args:
+            if isinstance(a, Iterator):
+                raise TypeError(f'cannot hash iterator')
+            if type(a) is int:
+                nbytes = (a.bit_length() + 5) // 4  # 4 bits to a byte
+                yield a.to_bytes(nbytes, byteorder='big')
+            elif type(a) is bytes:
+                yield a
+            elif type(a) is str:
+                yield b'str'
+                yield bytes(a, 'utf-8')
+            elif type(a) is OrderedDict:
+                yield b'odict'
+                yield from self._make_hashable(a.items())
+            elif type(a) is dict:
+                yield b'dict'
+                yield from self._make_hashable(sorted(a.items()))
+            elif type(a) is list:
+                yield bytes(str(type(a)), 'utf-8')
+                yield from self._make_hashable(a)
+            elif type(a) is set or type(a) is frozenset:
+                yield b'set'
+                try:
+                    yield from self._make_hashable(frozenset(a))
+                except TypeError:
+                    yield from self._make_hashable(sorted(a))
+            elif type(a) is tuple:
+                yield from self._make_hashable(a)
+            else:
+                raise TypeError(f'could not hash {a}')
+
+
+
+if __name__ == '__main__':
+
+    @DiskCache()
+    def foo(a, /, b, x='abc'):
+        pass
+
+    foo(1, 2)
