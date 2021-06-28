@@ -1,13 +1,13 @@
 import operator as op
 from functools import partial
-from typing import Callable, Iterable, Union
+from typing import Callable, Dict, Iterable, Union
 
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
 
 from skorch import NeuralNet
-from skorch.callbacks import Callback
+from skorch.callbacks import Callback, BatchScoring
 
 
 class PlotterCallback(Callback):
@@ -108,6 +108,26 @@ class ResultSaveCallback(Callback):
 
     def on_train_end(self, net, *args, **kwargs):
         net.history.to_file(self.filename(net))
+
+
+class BatchScoringWithUnpacker(BatchScoring):
+
+    def __init__(self, *args, unpacker: Callable[..., Dict], **kwargs):
+        '''
+
+        unpacker should accept any kwargs, but specifically useful will be:
+        - y
+        - y_pred
+
+        must return updated transformation as a dict, that will get called:
+            kwargs.update(rv)
+        '''
+        super(BatchScoring, self).__init__(*args, **kwargs)
+        self.transformer = unpacker
+
+    def on_batch_end(self, **kwargs):
+        kwargs.update(self.transformer(kwargs))
+        return super().on_batch_end(**kwargs)
 
 
 class AccuracyCallback(Callback):
